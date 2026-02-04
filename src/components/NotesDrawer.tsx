@@ -139,34 +139,42 @@ const NotesDrawer: React.FC<NotesDrawerProps> = ({
             </View>
 
             {/* Notes List */}
-            <ScrollView style={styles.notesList} showsVerticalScrollIndicator={false}>
-              {notes.length === 0 ? (
-                <View style={styles.emptyState}>
-                  <View style={[styles.emptyIconContainer, { backgroundColor: colors.primary + '15' }]}>
-                    <Text style={[styles.emptyIconText, { color: colors.primary }]}>N</Text>
+            <View style={styles.notesListContainer}>
+              <ScrollView
+                style={styles.notesList}
+                contentContainerStyle={notes.length === 0 ? styles.notesListContentEmpty : styles.notesListContent}
+                showsVerticalScrollIndicator={true}
+                nestedScrollEnabled={true}
+                bounces={true}
+              >
+                {notes.length === 0 ? (
+                  <View style={styles.emptyState}>
+                    <View style={[styles.emptyIconContainer, { backgroundColor: colors.primary + '15' }]}>
+                      <Text style={[styles.emptyIconText, { color: colors.primary }]}>N</Text>
+                    </View>
+                    <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
+                      No notes yet
+                    </Text>
+                    <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
+                      Tap "New Note" to get started
+                    </Text>
                   </View>
-                  <Text style={[styles.emptyText, { color: colors.textSecondary }]}>
-                    No notes yet
-                  </Text>
-                  <Text style={[styles.emptySubtext, { color: colors.textSecondary }]}>
-                    Tap "New Note" to get started
-                  </Text>
-                </View>
-              ) : (
-                notes.map((note) => (
-                  <SwipeableNoteItem
-                    key={note.id}
-                    note={note}
-                    isActive={note.id === activeNoteId}
-                    onPress={() => {
-                      onSelectNote(note.id);
-                      onClose();
-                    }}
-                    onDelete={() => onDeleteNote(note.id)}
-                  />
-                ))
-              )}
-            </ScrollView>
+                ) : (
+                  notes.map((note) => (
+                    <SwipeableNoteItem
+                      key={note.id}
+                      note={note}
+                      isActive={note.id === activeNoteId}
+                      onPress={() => {
+                        onSelectNote(note.id);
+                        onClose();
+                      }}
+                      onDelete={() => onDeleteNote(note.id)}
+                    />
+                  ))
+                )}
+              </ScrollView>
+            </View>
 
             {/* Footer */}
             <View style={[styles.footer, { borderTopColor: colors.border }]}>
@@ -303,8 +311,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
   },
+  notesListContainer: {
+    flex: 1,
+    minHeight: 0,
+  },
   notesList: {
     flex: 1,
+  },
+  notesListContent: {
+    paddingHorizontal: 8,
+    paddingBottom: 8,
+  },
+  notesListContentEmpty: {
+    flexGrow: 1,
     paddingHorizontal: 8,
   },
   emptyState: {
