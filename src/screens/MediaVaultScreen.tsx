@@ -45,7 +45,8 @@ import MediaViewerScreen from './MediaViewerScreen';
 import PasswordModal, { PasswordModalMode } from '../components/PasswordModal';
 import MediaItemActionSheet from '../components/MediaItemActionSheet';
 import ImportChoiceModal from '../components/ImportChoiceModal';
-import { Share, Platform } from 'react-native';
+import RNShare from 'react-native-share';
+import { Platform } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NUM_COLUMNS = 3;
@@ -478,14 +479,22 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
           setPendingShareAction(null);
           
           // Share the .ppenc file
-          await Share.share({
-            url: Platform.OS === 'ios' ? tempPath : `file://${tempPath}`,
-            title: `${pendingPasswordItem.filename}.ppenc`,
+          const fileUrl = Platform.OS === 'ios' ? tempPath : `file://${tempPath}`;
+          await RNShare.open({
+            url: fileUrl,
+            filename: `${pendingPasswordItem.filename}.ppenc`,
+            type: 'application/octet-stream',
+            failOnCancel: false,
           });
           
           // Clean up
           await cleanupTempFiles();
           return true;
+        }
+        return false;
+      } catch (error: any) {
+        if (error?.message !== 'User did not share') {
+          console.error('Error sharing encrypted:', error);
         }
         return false;
       } finally {
@@ -504,14 +513,22 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
           setPendingShareAction(null);
           
           // Share the decrypted file
-          await Share.share({
-            url: Platform.OS === 'ios' ? tempPath : `file://${tempPath}`,
-            title: pendingPasswordItem.filename,
+          const fileUrl = Platform.OS === 'ios' ? tempPath : `file://${tempPath}`;
+          await RNShare.open({
+            url: fileUrl,
+            filename: pendingPasswordItem.filename,
+            type: pendingPasswordItem.mimeType,
+            failOnCancel: false,
           });
           
           // Clean up
           await cleanupTempFiles();
           return true;
+        }
+        return false;
+      } catch (error: any) {
+        if (error?.message !== 'User did not share') {
+          console.error('Error sharing decrypted:', error);
         }
         return false;
       } finally {

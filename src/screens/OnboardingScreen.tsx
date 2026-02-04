@@ -33,14 +33,14 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   const [step, setStep] = useState<'welcome' | 'name' | 'setup'>('welcome');
 
   const colors = {
-    background: isDarkMode ? '#0d1117' : '#f6f8fa',
-    card: isDarkMode ? '#161b22' : '#ffffff',
-    primary: '#58a6ff',
-    primaryDark: '#1f6feb',
-    text: isDarkMode ? '#c9d1d9' : '#24292f',
-    textSecondary: isDarkMode ? '#8b949e' : '#57606a',
-    border: isDarkMode ? '#30363d' : '#d0d7de',
-    inputBg: isDarkMode ? '#0d1117' : '#f6f8fa',
+    background: isDarkMode ? '#000000' : '#FFFFFF',
+    card: isDarkMode ? '#1A1A1A' : '#F8F8F8',
+    primary: '#F5A862',
+    primaryDark: '#E8944F',
+    text: isDarkMode ? '#FFFFFF' : '#1A1A1A',
+    textSecondary: isDarkMode ? '#999999' : '#666666',
+    border: isDarkMode ? '#333333' : '#E5E5E5',
+    inputBg: isDarkMode ? '#1A1A1A' : '#F8F8F8',
     success: '#3fb950',
     error: '#f85149',
   };
@@ -238,8 +238,8 @@ interface FeatureItemProps {
 
 const FeatureItem: React.FC<FeatureItemProps> = ({ iconText, text, colors }) => (
   <View style={styles.featureItem}>
-    <View style={[styles.featureIconContainer, { backgroundColor: '#58a6ff15' }]}>
-      <Text style={[styles.featureIconText, { color: '#58a6ff' }]}>{iconText}</Text>
+    <View style={[styles.featureIconContainer, { backgroundColor: '#F5A86215' }]}>
+      <Text style={[styles.featureIconText, { color: '#F5A862' }]}>{iconText}</Text>
     </View>
     <Text style={[styles.featureText, { color: colors.textSecondary }]}>
       {text}

@@ -42,6 +42,7 @@ const NotesScreen: React.FC<NotesScreenProps> = ({ user, onSettingsChange, onOpe
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [secretKey, setSecretKey] = useState<string | null>(null);
+  const [currentUser, setCurrentUser] = useState<UserAccount>(user);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasChangesRef = useRef(false);
 
@@ -220,9 +221,10 @@ const NotesScreen: React.FC<NotesScreenProps> = ({ user, onSettingsChange, onOpe
   if (isProfileOpen) {
     return (
       <ProfileScreen
-        user={user}
+        user={currentUser}
         onClose={() => setIsProfileOpen(false)}
         onSettingsChange={onSettingsChange}
+        onUserUpdate={(updatedUser) => setCurrentUser(updatedUser)}
       />
     );
   }
@@ -273,7 +275,7 @@ const NotesScreen: React.FC<NotesScreenProps> = ({ user, onSettingsChange, onOpe
               style={styles.profileButton}>
               <View style={[styles.profileAvatar, { backgroundColor: colors.primary }]}>
                 <Text style={styles.profileAvatarText}>
-                  {user.name.charAt(0).toUpperCase()}
+                  {currentUser.name.charAt(0).toUpperCase()}
                 </Text>
               </View>
             </TouchableOpacity>
@@ -325,7 +327,7 @@ const NotesScreen: React.FC<NotesScreenProps> = ({ user, onSettingsChange, onOpe
         onNewNote={() => handleNewNote()}
         onDeleteNote={handleDeleteNote}
         onOpenVault={onOpenVault}
-        user={user}
+        user={currentUser}
       />
     </SafeAreaView>
   );

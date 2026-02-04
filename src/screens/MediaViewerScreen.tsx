@@ -8,12 +8,12 @@ import {
   ActivityIndicator,
   ScrollView,
   Alert,
-  Share,
   StatusBar,
   Dimensions,
   Platform,
   Modal,
 } from 'react-native';
+import RNShare from 'react-native-share';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -125,9 +125,12 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
       }
       
       if (tempPath) {
-        await Share.share({
-          url: Platform.OS === 'ios' ? tempPath : `file://${tempPath}`,
-          title: media.filename,
+        const fileUrl = Platform.OS === 'ios' ? tempPath : `file://${tempPath}`;
+        await RNShare.open({
+          url: fileUrl,
+          filename: media.filename,
+          type: media.mimeType,
+          failOnCancel: false,
         });
         
         // Clean up after sharing
@@ -135,8 +138,11 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
       } else {
         Alert.alert('Error', 'Failed to prepare file for sharing.');
       }
-    } catch (error) {
-      console.error('Error sharing:', error);
+    } catch (error: any) {
+      // react-native-share throws on cancel, which is fine
+      if (error?.message !== 'User did not share') {
+        console.error('Error sharing:', error);
+      }
     } finally {
       setIsSharing(false);
     }
@@ -156,9 +162,12 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
       const tempPath = await exportAsEncryptedBundle(media.id, password);
       
       if (tempPath) {
-        await Share.share({
-          url: Platform.OS === 'ios' ? tempPath : `file://${tempPath}`,
-          title: `${media.filename}.ppenc`,
+        const fileUrl = Platform.OS === 'ios' ? tempPath : `file://${tempPath}`;
+        await RNShare.open({
+          url: fileUrl,
+          filename: `${media.filename}.ppenc`,
+          type: 'application/octet-stream',
+          failOnCancel: false,
         });
         
         // Clean up after sharing
@@ -166,8 +175,10 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
       } else {
         Alert.alert('Error', 'Failed to create encrypted bundle.');
       }
-    } catch (error) {
-      console.error('Error sharing encrypted:', error);
+    } catch (error: any) {
+      if (error?.message !== 'User did not share') {
+        console.error('Error sharing encrypted:', error);
+      }
     } finally {
       setIsSharing(false);
     }
@@ -600,12 +611,14 @@ const styles = StyleSheet.create({
   },
   shareModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: 'rgba(0,0,0,0.6)',
     justifyContent: 'flex-end',
-    padding: 16,
+    paddingHorizontal: 0,
+    paddingBottom: 0,
   },
   shareModalContainer: {
-    borderRadius: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     overflow: 'hidden',
   },
   shareModalTitle: {

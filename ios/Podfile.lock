@@ -1623,6 +1623,27 @@ PODS:
     - Yoga
   - RNPermissions (5.4.4):
     - React-Core
+  - RNShare (12.2.5):
+    - DoubleConversion
+    - glog
+    - hermes-engine
+    - RCT-Folly (= 2024.11.18.00)
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - Yoga
   - RNVectorIcons (10.3.0):
     - DoubleConversion
     - glog
@@ -1728,6 +1749,7 @@ DEPENDENCIES:
   - RNFS (from `../node_modules/react-native-fs`)
   - RNKeychain (from `../node_modules/react-native-keychain`)
   - RNPermissions (from `../node_modules/react-native-permissions`)
+  - RNShare (from `../node_modules/react-native-share`)
   - RNVectorIcons (from `../node_modules/react-native-vector-icons`)
   - Yoga (from `../node_modules/react-native/ReactCommon/yoga`)
 
@@ -1893,6 +1915,8 @@ EXTERNAL SOURCES:
     :path: "../node_modules/react-native-keychain"
   RNPermissions:
     :path: "../node_modules/react-native-permissions"
+  RNShare:
+    :path: "../node_modules/react-native-share"
   RNVectorIcons:
     :path: "../node_modules/react-native-vector-icons"
   Yoga:
@@ -1977,6 +2001,7 @@ SPEC CHECKSUMS:
   RNFS: 89de7d7f4c0f6bafa05343c578f61118c8282ed8
   RNKeychain: 8024819eb861575c8e1bdcfc6e02c2b947ed16f7
   RNPermissions: d82a09a41bb2f2d8f12b7c5fe12a45ed79ce8fba
+  RNShare: d4185a30a4610f9d3eded2fd3cfc3bc968a3df98
   RNVectorIcons: 0e379edcd28e94c210760bd2badbecd97f8ac08a
   SocketRocket: d4aabe649be1e368d1318fdf28a022d714d65748
   Yoga: 92f3bb322c40a86b7233b815854730442e01b8c4

@@ -184,13 +184,19 @@ const MediaItemActionSheet: React.FC<MediaItemActionSheetProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+
     justifyContent: 'flex-end',
-    padding: 16,
   },
   container: {
-    borderRadius: 16,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
     overflow: 'hidden',
+    // Remove any box shadow
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   title: {
     fontSize: 14,

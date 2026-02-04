@@ -110,16 +110,21 @@ const ImportChoiceModal: React.FC<ImportChoiceModalProps> = ({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    padding: 24,
+    paddingHorizontal: 24,
   },
   container: {
     width: '100%',
     maxWidth: 340,
     borderRadius: 16,
     padding: 24,
+    // Remove any box shadow
+    shadowColor: 'transparent',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    elevation: 0,
   },
   header: {
     alignItems: 'center',

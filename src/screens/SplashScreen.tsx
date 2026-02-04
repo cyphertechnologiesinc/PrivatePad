@@ -39,7 +39,7 @@ const SplashScreen: React.FC = () => {
 
   return (
     <View style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#0a0a0f" />
+      <StatusBar barStyle="light-content" backgroundColor="#000000" />
       
       <View style={styles.content}>
         {/* Logo */}
@@ -77,7 +77,7 @@ const SplashScreen: React.FC = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#0a0a0f',
+    backgroundColor: '#000000',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -111,7 +111,7 @@ const styles = StyleSheet.create({
   },
   loadingProgress: {
     height: '100%',
-    backgroundColor: '#58a6ff',
+    backgroundColor: '#F5A862',
     borderRadius: 2,
   },
   footer: {
@@ -126,7 +126,7 @@ const styles = StyleSheet.create({
   crypticText: {
     fontSize: 14,
     fontWeight: '600',
-    color: 'rgba(255, 255, 255, 0.6)',
+    color: '#F5A862',
     letterSpacing: 3,
   },
 });

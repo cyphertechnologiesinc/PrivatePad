@@ -10,6 +10,8 @@ import {
   Platform,
   Linking,
   Alert,
+  TextInput,
+  Keyboard,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -21,6 +23,7 @@ import {
   getAppSettings,
   setThemePreference as saveThemePreference,
   setRequireAuthOnLaunch,
+  storeUserAccount,
 } from '../services/storageService';
 import { getBiometryType } from '../services/keychainService';
 
@@ -28,6 +31,7 @@ interface ProfileScreenProps {
   user: UserAccount;
   onClose: () => void;
   onSettingsChange?: (settings: AppSettings) => void;
+  onUserUpdate?: (user: UserAccount) => void;
 }
 
 // Crypto wallet addresses - replace with your actual addresses
@@ -41,6 +45,7 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   user,
   onClose,
   onSettingsChange,
+  onUserUpdate,
 }) => {
   const { colors, themePreference, setThemePreference, isDarkMode } = useTheme();
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -48,6 +53,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   const [isLoading, setIsLoading] = useState(true);
   const [copiedWallet, setCopiedWallet] = useState<string | null>(null);
   const [securityInfoExpanded, setSecurityInfoExpanded] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [editedName, setEditedName] = useState(user.name);
+  const [currentUser, setCurrentUser] = useState(user);
 
   useEffect(() => {
     loadSettings();
@@ -129,6 +137,35 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
     return `${address.slice(0, 8)}...${address.slice(-6)}`;
   };
 
+  const handleSaveName = async () => {
+    const trimmedName = editedName.trim();
+    if (trimmedName.length === 0) {
+      Alert.alert('Invalid Name', 'Please enter a valid name.');
+      return;
+    }
+    
+    try {
+      const updatedUser: UserAccount = {
+        ...currentUser,
+        name: trimmedName,
+      };
+      await storeUserAccount(updatedUser);
+      setCurrentUser(updatedUser);
+      onUserUpdate?.(updatedUser);
+      setIsEditingName(false);
+      Keyboard.dismiss();
+    } catch (error) {
+      console.error('Error saving name:', error);
+      Alert.alert('Error', 'Failed to save name. Please try again.');
+    }
+  };
+
+  const handleCancelEdit = () => {
+    setEditedName(currentUser.name);
+    setIsEditingName(false);
+    Keyboard.dismiss();
+  };
+
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
       <StatusBar
@@ -152,15 +189,57 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           <View style={styles.profileHeader}>
             <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
               <Text style={styles.avatarText}>
-                {user.name.charAt(0).toUpperCase()}
+                {currentUser.name.charAt(0).toUpperCase()}
               </Text>
             </View>
             <View style={styles.profileInfo}>
-              <Text style={[styles.profileName, { color: colors.text }]}>
-                {user.name}
-              </Text>
+              {isEditingName ? (
+                <View style={styles.editNameContainer}>
+                  <TextInput
+                    style={[styles.nameInput, { 
+                      color: colors.text, 
+                      backgroundColor: colors.inputBg,
+                      borderColor: colors.border,
+                    }]}
+                    value={editedName}
+                    onChangeText={setEditedName}
+                    autoFocus
+                    placeholder="Enter your name"
+                    placeholderTextColor={colors.textSecondary}
+                    maxLength={30}
+                    returnKeyType="done"
+                    onSubmitEditing={handleSaveName}
+                  />
+                  <View style={styles.editButtons}>
+                    <TouchableOpacity 
+                      onPress={handleCancelEdit} 
+                      style={[styles.editButton, { backgroundColor: colors.border }]}
+                    >
+                      <Text style={[styles.editButtonText, { color: colors.text }]}>Cancel</Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity 
+                      onPress={handleSaveName}
+                      style={[styles.editButton, { backgroundColor: colors.primary }]}
+                    >
+                      <Text style={[styles.editButtonText, { color: '#fff' }]}>Save</Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              ) : (
+                <View style={styles.nameRow}>
+                  <Text style={[styles.profileName, { color: colors.text }]}>
+                    {currentUser.name}
+                  </Text>
+                  <TouchableOpacity 
+                    onPress={() => setIsEditingName(true)}
+                    style={styles.editIconButton}
+                  >
+                    <MaterialIcons name="edit" size={18} color={colors.primary} />
+                  </TouchableOpacity>
+                </View>
+              )}
               <Text style={[styles.profileDate, { color: colors.textSecondary }]}>
-                Member since {formatDate(user.createdAt)}
+                Member since {formatDate(currentUser.createdAt)}
               </Text>
             </View>
           </View>
@@ -592,6 +671,39 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     marginBottom: 4,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  editIconButton: {
+    padding: 4,
+  },
+  editNameContainer: {
+    flex: 1,
+  },
+  nameInput: {
+    fontSize: 16,
+    fontWeight: '500',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    marginBottom: 8,
+  },
+  editButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  editButton: {
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 6,
+  },
+  editButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
   },
   profileDate: {
     fontSize: 14,
