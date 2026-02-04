@@ -36,9 +36,9 @@ interface ProfileScreenProps {
 
 // Crypto wallet addresses - replace with your actual addresses
 const CRYPTO_WALLETS = {
-  bitcoin: 'bc1qxy2kgdygjrsqtzq2n0yrf2493p83kkfjhx0wlh',
-  ethereum: '0x71C7656EC7ab88b098defB751B7401B5f6d8976F',
-  solana: '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU',
+  bitcoin: 'bc1qq7qcekgfywv4q8g96lpvm6uum5hqrpc5wy7gsj',
+  ethereum: '0x515e4Ee18BDF7C70e683E6005E17dA056285DcE1',
+  solana: 'GQSFovXb9oiRC9zZyqLcXyMfmF44ZU3ATWDEaWxL9Aiu',
 };
 
 const ProfileScreen: React.FC<ProfileScreenProps> = ({
@@ -119,15 +119,9 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
   };
 
   const openBuyMeCoffee = async () => {
-    // Replace 'your-username' with your actual Buy Me a Coffee username
     const url = 'https://cryptictechnologies.co';
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) {
-        await Linking.openURL(url);
-      } else {
-        Alert.alert('Error', 'Unable to open link');
-      }
+      await Linking.openURL(url);
     } catch (error) {
       Alert.alert('Error', 'Unable to open link');
     }
