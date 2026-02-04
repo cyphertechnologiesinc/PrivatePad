@@ -27,6 +27,7 @@ interface NotesDrawerProps {
   onNewNote: () => void;
   onDeleteNote: (noteId: string) => void;
   onOpenVault: () => void;
+  onImportNote?: () => void;
   user: UserAccount | null;
 }
 
@@ -39,6 +40,7 @@ const NotesDrawer: React.FC<NotesDrawerProps> = ({
   onNewNote,
   onDeleteNote,
   onOpenVault,
+  onImportNote,
   user,
 }) => {
   const { colors } = useTheme();
@@ -130,6 +132,26 @@ const NotesDrawer: React.FC<NotesDrawerProps> = ({
               </View>
               <Text style={[styles.vaultArrow, { color: colors.textSecondary }]}>›</Text>
             </TouchableOpacity>
+
+            {/* Import Encrypted Note Button */}
+            {onImportNote && (
+              <TouchableOpacity
+                style={[styles.importButton, { backgroundColor: colors.card, borderColor: colors.border }]}
+                onPress={() => {
+                  onImportNote();
+                  onClose();
+                }}
+                activeOpacity={0.8}>
+                <MaterialIcons name="enhanced-encryption" size={24} color={colors.primary} style={styles.vaultIcon} />
+                <View style={styles.vaultTextContainer}>
+                  <Text style={[styles.vaultText, { color: colors.text }]}>Import Encrypted Note</Text>
+                  <Text style={[styles.vaultSubtext, { color: colors.textSecondary }]}>
+                    Load a .ppenc note file
+                  </Text>
+                </View>
+                <Text style={[styles.vaultArrow, { color: colors.textSecondary }]}>›</Text>
+              </TouchableOpacity>
+            )}
 
             {/* Swipe Hint */}
             <View style={styles.swipeHint}>
@@ -302,6 +324,16 @@ const styles = StyleSheet.create({
   vaultArrow: {
     fontSize: 24,
     fontWeight: '300',
+  },
+  importButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    borderRadius: 10,
+    borderWidth: 1,
   },
   swipeHint: {
     paddingHorizontal: 16,

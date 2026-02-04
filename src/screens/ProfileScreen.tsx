@@ -273,6 +273,42 @@ const ProfileScreen: React.FC<ProfileScreenProps> = ({
           </View>
         </View>
 
+        {/* Important Warnings Section */}
+        <Text style={[styles.sectionTitle, { color: colors.error }]}>
+          IMPORTANT
+        </Text>
+        <View style={[styles.section, styles.warningSection, { backgroundColor: colors.error + '10', borderColor: colors.error + '30' }]}>
+          <View style={styles.warningItem}>
+            <View style={[styles.warningIconBg, { backgroundColor: colors.error + '20' }]}>
+              <MaterialIcons name="warning" size={20} color={colors.error} />
+            </View>
+            <View style={styles.warningContent}>
+              <Text style={[styles.warningItemTitle, { color: colors.text }]}>
+                Data Loss Warning
+              </Text>
+              <Text style={[styles.warningItemDesc, { color: colors.textSecondary }]}>
+                All notes and vault files are stored only on this device. If you delete PrivatePad, all your data will be permanently lost with no way to recover it.
+              </Text>
+            </View>
+          </View>
+
+          <View style={[styles.divider, { backgroundColor: colors.error + '20' }]} />
+
+          <View style={styles.warningItem}>
+            <View style={[styles.warningIconBg, { backgroundColor: colors.error + '20' }]}>
+              <MaterialIcons name="delete-sweep" size={20} color={colors.error} />
+            </View>
+            <View style={styles.warningContent}>
+              <Text style={[styles.warningItemTitle, { color: colors.text }]}>
+                Delete Original Files
+              </Text>
+              <Text style={[styles.warningItemDesc, { color: colors.textSecondary }]}>
+                After importing photos, videos, or documents into PrivatePad, delete the original files from your device's gallery and file system for maximum security.
+              </Text>
+            </View>
+          </View>
+        </View>
+
         {/* Security Section */}
         <Text style={[styles.sectionTitle, { color: colors.textSecondary }]}>
           SECURITY
@@ -900,6 +936,33 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     marginLeft: 12,
+  },
+  warningSection: {
+    paddingVertical: 12,
+  },
+  warningItem: {
+    flexDirection: 'row',
+    paddingVertical: 4,
+  },
+  warningIconBg: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  warningContent: {
+    flex: 1,
+  },
+  warningItemTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  warningItemDesc: {
+    fontSize: 13,
+    lineHeight: 18,
   },
 });
 

@@ -109,18 +109,26 @@ export const KEYCHAIN_SERVICE = {
 } as const;
 
 // Portable encrypted file format for sharing
+export type EncryptedContentType = 'media' | 'note';
+
 export interface PrivatePadEncryptedFile {
   version: number;
   format: 'privatepad-encrypted';
-  filename: string;
-  mimeType: string;
-  fileSize: number;
+  contentType: EncryptedContentType; // Distinguishes notes from media
+  // Common fields
   ciphertext: string;  // base64 encoded encrypted data
   nonce: string;       // base64 encoded nonce
   salt: string;        // base64 encoded salt for key derivation
   createdAt: number;
+  // Media-specific fields (when contentType === 'media')
+  filename?: string;
+  mimeType?: string;
+  fileSize?: number;
+  // Note-specific fields (when contentType === 'note')
+  noteTitle?: string;
+  noteId?: string;
 }
 
-export const PPENC_VERSION = 1;
+export const PPENC_VERSION = 2; // Bumped for contentType support
 export const PPENC_FORMAT = 'privatepad-encrypted' as const;
 

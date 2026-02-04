@@ -1088,6 +1088,7 @@ export const exportAsEncryptedBundle = async (
     const bundle: PrivatePadEncryptedFile = {
       version: PPENC_VERSION,
       format: PPENC_FORMAT,
+      contentType: 'media',
       filename: metadata.filename,
       mimeType: metadata.mimeType,
       fileSize: metadata.fileSize,
@@ -1111,7 +1112,7 @@ export const exportAsEncryptedBundle = async (
 };
 
 /**
- * Parse and validate a .ppenc file
+ * Parse and validate a .ppenc file for media
  * @param filePath - Path to the .ppenc file
  * @returns Parsed bundle or null if invalid
  */
@@ -1125,13 +1126,10 @@ export const parseEncryptedBundle = async (
     // Parse JSON
     const bundle = JSON.parse(content) as PrivatePadEncryptedFile;
     
-    // Validate required fields
+    // Validate common required fields
     if (
       bundle.format !== PPENC_FORMAT ||
       typeof bundle.version !== 'number' ||
-      typeof bundle.filename !== 'string' ||
-      typeof bundle.mimeType !== 'string' ||
-      typeof bundle.fileSize !== 'number' ||
       typeof bundle.ciphertext !== 'string' ||
       typeof bundle.nonce !== 'string' ||
       typeof bundle.salt !== 'string' ||
@@ -1145,6 +1143,31 @@ export const parseEncryptedBundle = async (
     if (bundle.version > PPENC_VERSION) {
       console.error('Unsupported .ppenc version:', bundle.version);
       return null;
+    }
+
+    // Handle backward compatibility: v1 files without contentType are media
+    if (!bundle.contentType) {
+      bundle.contentType = 'media';
+    }
+
+    // For media files, validate media-specific fields
+    if (bundle.contentType === 'media') {
+      if (
+        typeof bundle.filename !== 'string' ||
+        typeof bundle.mimeType !== 'string' ||
+        typeof bundle.fileSize !== 'number'
+      ) {
+        console.error('Invalid media .ppenc file: missing required fields');
+        return null;
+      }
+    }
+
+    // For note files, validate note-specific fields
+    if (bundle.contentType === 'note') {
+      if (typeof bundle.noteTitle !== 'string') {
+        console.error('Invalid note .ppenc file: missing required fields');
+        return null;
+      }
     }
 
     return bundle;

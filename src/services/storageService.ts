@@ -1,4 +1,5 @@
 import EncryptedStorage from 'react-native-encrypted-storage';
+import RNFS from 'react-native-fs';
 import {
   Note,
   EncryptedNote,
@@ -8,12 +9,17 @@ import {
   ThemePreference,
   DEFAULT_SETTINGS,
   STORAGE_KEYS,
+  PrivatePadEncryptedFile,
+  PPENC_VERSION,
+  PPENC_FORMAT,
 } from '../types';
 import {
   encrypt,
   decrypt,
   generateId,
   EncryptedData,
+  generateSalt,
+  deriveKeyFromPassword,
 } from './cryptoService';
 
 /**
@@ -346,5 +352,203 @@ export const setScreenshotPrevention = async (
   enabled: boolean,
 ): Promise<void> => {
   await updateSetting('screenshotPrevention', enabled);
+};
+
+// ============================================
+// Encrypted Note Sharing Functions
+// ============================================
+
+/**
+ * Export a note as an encrypted .ppenc bundle for sharing
+ * @param note - The note to export
+ * @param password - Password to protect the bundle
+ * @returns Path to the .ppenc file in temp directory, or null if failed
+ */
+export const exportNoteAsEncryptedBundle = async (
+  note: Note,
+  password: string,
+): Promise<string | null> => {
+  try {
+    // Generate salt and derive key from password
+    const salt = generateSalt();
+    const derivedKey = deriveKeyFromPassword(password, salt);
+
+    // Encrypt the note content
+    const noteData = JSON.stringify({
+      title: note.title,
+      content: note.content,
+    });
+    const encrypted = encrypt(noteData, derivedKey);
+
+    // Create the .ppenc bundle
+    const bundle: PrivatePadEncryptedFile = {
+      version: PPENC_VERSION,
+      format: PPENC_FORMAT,
+      contentType: 'note',
+      noteTitle: note.title,
+      noteId: note.id,
+      ciphertext: encrypted.ciphertext,
+      nonce: encrypted.nonce,
+      salt: salt,
+      createdAt: note.createdAt,
+    };
+
+    // Write to temp directory
+    const bundleJson = JSON.stringify(bundle, null, 2);
+    const safeName = (note.title || 'note').replace(/[^a-zA-Z0-9.-]/g, '_');
+    const tempPath = `${RNFS.TemporaryDirectoryPath}/${safeName}.ppenc`;
+    await RNFS.writeFile(tempPath, bundleJson, 'utf8');
+
+    return tempPath;
+  } catch (error) {
+    console.error('Error exporting encrypted note bundle:', error);
+    return null;
+  }
+};
+
+/**
+ * Parse and validate a .ppenc note file
+ * @param filePath - Path to the .ppenc file
+ * @returns Parsed bundle or null if invalid/not a note
+ */
+export const parseEncryptedNoteBundle = async (
+  filePath: string,
+): Promise<PrivatePadEncryptedFile | null> => {
+  try {
+    // Read the file
+    const content = await RNFS.readFile(filePath, 'utf8');
+    
+    // Parse JSON
+    const bundle = JSON.parse(content) as PrivatePadEncryptedFile;
+    
+    // Validate common required fields
+    if (
+      bundle.format !== PPENC_FORMAT ||
+      typeof bundle.version !== 'number' ||
+      typeof bundle.ciphertext !== 'string' ||
+      typeof bundle.nonce !== 'string' ||
+      typeof bundle.salt !== 'string' ||
+      typeof bundle.createdAt !== 'number'
+    ) {
+      console.error('Invalid .ppenc file format');
+      return null;
+    }
+
+    // Check version compatibility
+    if (bundle.version > PPENC_VERSION) {
+      console.error('Unsupported .ppenc version:', bundle.version);
+      return null;
+    }
+
+    // Verify this is a note bundle
+    if (bundle.contentType !== 'note') {
+      console.error('This .ppenc file is not a note');
+      return null;
+    }
+
+    // Validate note-specific fields
+    if (typeof bundle.noteTitle !== 'string') {
+      console.error('Invalid note .ppenc file: missing required fields');
+      return null;
+    }
+
+    return bundle;
+  } catch (error) {
+    console.error('Error parsing encrypted note bundle:', error);
+    return null;
+  }
+};
+
+/**
+ * Verify a password works for a .ppenc note bundle by attempting decryption
+ * @param bundle - Parsed .ppenc bundle
+ * @param password - Password to try
+ * @returns true if password is correct
+ */
+export const verifyNoteBundlePassword = (
+  bundle: PrivatePadEncryptedFile,
+  password: string,
+): boolean => {
+  try {
+    const derivedKey = deriveKeyFromPassword(password, bundle.salt);
+    const encryptedData: EncryptedData = {
+      ciphertext: bundle.ciphertext,
+      nonce: bundle.nonce,
+    };
+    const decrypted = decrypt(encryptedData, derivedKey);
+    return decrypted !== null;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Import an encrypted note bundle into the vault
+ * @param bundle - Parsed .ppenc note bundle
+ * @param password - Password for the bundle
+ * @param secretKey - User's master encryption key to re-encrypt with
+ * @returns The imported Note or null if failed
+ */
+export const importEncryptedNoteBundle = async (
+  bundle: PrivatePadEncryptedFile,
+  password: string,
+  secretKey: string,
+): Promise<Note | null> => {
+  try {
+    // Derive key from password
+    const derivedKey = deriveKeyFromPassword(password, bundle.salt);
+
+    // Decrypt the note data
+    const encryptedData: EncryptedData = {
+      ciphertext: bundle.ciphertext,
+      nonce: bundle.nonce,
+    };
+    const decrypted = decrypt(encryptedData, derivedKey);
+
+    if (!decrypted) {
+      console.error('Failed to decrypt note bundle - wrong password');
+      return null;
+    }
+
+    // Parse the decrypted note data
+    const noteData = JSON.parse(decrypted) as { title: string; content: string };
+
+    // Create new note with fresh ID
+    const now = Date.now();
+    const newNote: Note = {
+      id: generateId(),
+      title: noteData.title,
+      content: noteData.content,
+      createdAt: bundle.createdAt,
+      updatedAt: now,
+    };
+
+    // Save the note with master key encryption
+    await saveNote(newNote, secretKey);
+
+    return newNote;
+  } catch (error) {
+    console.error('Error importing encrypted note bundle:', error);
+    return null;
+  }
+};
+
+/**
+ * Clean up temporary exported note files
+ */
+export const cleanupTempNoteFiles = async (): Promise<void> => {
+  try {
+    const tempDir = RNFS.TemporaryDirectoryPath;
+    const files = await RNFS.readDir(tempDir);
+
+    for (const file of files) {
+      // Delete .ppenc files
+      if (file.name.endsWith('.ppenc')) {
+        await RNFS.unlink(file.path);
+      }
+    }
+  } catch (error) {
+    console.error('Error cleaning up temp note files:', error);
+  }
 };
 

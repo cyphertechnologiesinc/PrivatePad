@@ -128,6 +128,15 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           colors={colors}
         />
       </View>
+      
+      {/* Important Warnings */}
+      <View style={[styles.warningContainer, { backgroundColor: colors.error + '15', borderColor: colors.error + '30' }]}>
+        <Text style={[styles.warningTitle, { color: colors.error }]}>Important</Text>
+        <Text style={[styles.warningText, { color: colors.textSecondary }]}>
+          • Deleting this app will permanently erase all stored notes and files{'\n'}
+          • After importing files, delete the originals from your device for best security
+        </Text>
+      </View>
       <TouchableOpacity
         style={[styles.primaryButton, { backgroundColor: colors.primary }]}
         onPress={() => setStep('name')}
@@ -297,7 +306,23 @@ const styles = StyleSheet.create({
   },
   featureList: {
     width: '100%',
-    marginBottom: 32,
+    marginBottom: 16,
+  },
+  warningContainer: {
+    width: '100%',
+    padding: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    marginBottom: 24,
+  },
+  warningTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  warningText: {
+    fontSize: 13,
+    lineHeight: 20,
   },
   featureItem: {
     flexDirection: 'row',

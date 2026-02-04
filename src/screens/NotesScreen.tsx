@@ -11,19 +11,29 @@ import {
   Alert,
   ActivityIndicator,
   Share,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Note, UserAccount, AppSettings } from '../types';
+import DocumentPicker from 'react-native-document-picker';
+import RNShare from 'react-native-share';
+import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
+import { Note, UserAccount, AppSettings, PrivatePadEncryptedFile } from '../types';
 import {
   saveNote,
   loadAllNotes,
   deleteNote as deleteNoteStorage,
   createNewNote,
+  exportNoteAsEncryptedBundle,
+  parseEncryptedNoteBundle,
+  verifyNoteBundlePassword,
+  importEncryptedNoteBundle,
+  cleanupTempNoteFiles,
 } from '../services/storageService';
 import { getSecretKey } from '../services/keychainService';
 import { useTheme } from '../context/ThemeContext';
 import NotesDrawer from '../components/NotesDrawer';
 import ProfileScreen from './ProfileScreen';
+import PasswordModal, { PasswordModalMode } from '../components/PasswordModal';
 
 interface NotesScreenProps {
   user: UserAccount;
@@ -45,6 +55,17 @@ const NotesScreen: React.FC<NotesScreenProps> = ({ user, onSettingsChange, onOpe
   const [currentUser, setCurrentUser] = useState<UserAccount>(user);
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hasChangesRef = useRef(false);
+
+  // Share options modal state
+  const [showShareOptions, setShowShareOptions] = useState(false);
+  
+  // Password modal state for encrypted sharing
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [passwordModalMode, setPasswordModalMode] = useState<PasswordModalMode>('set');
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Import state
+  const [pendingImportBundle, setPendingImportBundle] = useState<PrivatePadEncryptedFile | null>(null);
 
   // Load notes on mount
   useEffect(() => {
@@ -186,7 +207,13 @@ const NotesScreen: React.FC<NotesScreenProps> = ({ user, onSettingsChange, onOpe
     }
   };
 
-  const handleShareNote = async () => {
+  const handleShareNote = () => {
+    if (!activeNote || !content) return;
+    setShowShareOptions(true);
+  };
+
+  const handleShareAsText = async () => {
+    setShowShareOptions(false);
     if (!activeNote) return;
 
     try {
@@ -199,6 +226,127 @@ const NotesScreen: React.FC<NotesScreenProps> = ({ user, onSettingsChange, onOpe
       });
     } catch (error) {
       console.error('Error sharing note:', error);
+    }
+  };
+
+  const handleShareEncrypted = () => {
+    setShowShareOptions(false);
+    setPasswordModalMode('set');
+    setPasswordModalVisible(true);
+  };
+
+  const handlePasswordSubmit = async (password: string): Promise<boolean> => {
+    if (!activeNote || !secretKey) return false;
+
+    setIsProcessing(true);
+    try {
+      // For sharing: export the note as encrypted bundle
+      if (passwordModalMode === 'set' && !pendingImportBundle) {
+        // First save the current note state
+        const noteToExport: Note = {
+          ...activeNote,
+          title: title || 'Untitled',
+          content,
+          updatedAt: Date.now(),
+        };
+
+        const tempPath = await exportNoteAsEncryptedBundle(noteToExport, password);
+        if (tempPath) {
+          setPasswordModalVisible(false);
+          
+          // Share the .ppenc file
+          const fileUrl = Platform.OS === 'ios' ? tempPath : `file://${tempPath}`;
+          const safeName = (noteToExport.title || 'note').replace(/[^a-zA-Z0-9.-]/g, '_');
+          
+          await RNShare.open({
+            url: fileUrl,
+            filename: `${safeName}.ppenc`,
+            type: 'application/octet-stream',
+            failOnCancel: false,
+          });
+          
+          // Clean up
+          await cleanupTempNoteFiles();
+          return true;
+        }
+        return false;
+      }
+      
+      // For importing: verify password and import
+      if (passwordModalMode === 'enter' && pendingImportBundle) {
+        const isValid = verifyNoteBundlePassword(pendingImportBundle, password);
+        if (!isValid) {
+          return false; // Wrong password
+        }
+        
+        const importedNote = await importEncryptedNoteBundle(
+          pendingImportBundle,
+          password,
+          secretKey
+        );
+        
+        if (importedNote) {
+          setPasswordModalVisible(false);
+          setPendingImportBundle(null);
+          
+          // Add to notes list and select it
+          setNotes((prev) => [importedNote, ...prev]);
+          selectNote(importedNote);
+          
+          Alert.alert('Success', `"${importedNote.title}" imported successfully.`);
+          return true;
+        }
+        return false;
+      }
+    } catch (error: any) {
+      if (error?.message !== 'User did not share') {
+        console.error('Error in password submit:', error);
+      }
+      return false;
+    } finally {
+      setIsProcessing(false);
+    }
+    return false;
+  };
+
+  const handlePasswordCancel = () => {
+    setPasswordModalVisible(false);
+    setPendingImportBundle(null);
+  };
+
+  const handleImportEncryptedNote = async () => {
+    try {
+      const results = await DocumentPicker.pick({
+        type: [DocumentPicker.types.allFiles],
+        copyTo: 'cachesDirectory',
+      });
+
+      const doc = results[0];
+      const fileUri = doc.fileCopyUri || doc.uri;
+      
+      // Check if it's a .ppenc file
+      if (!doc.name?.toLowerCase().endsWith('.ppenc')) {
+        Alert.alert('Invalid File', 'Please select a .ppenc encrypted file.');
+        return;
+      }
+
+      // Parse the bundle
+      const bundle = await parseEncryptedNoteBundle(fileUri);
+      
+      if (!bundle) {
+        Alert.alert('Invalid File', 'This file is not a valid encrypted note. It may be a media file or corrupted.');
+        return;
+      }
+
+      // Store the bundle and show password modal
+      setPendingImportBundle(bundle);
+      setPasswordModalMode('enter');
+      setPasswordModalVisible(true);
+    } catch (error) {
+      if (!DocumentPicker.isCancel(error)) {
+        console.error('Error importing encrypted note:', error);
+        Alert.alert('Error', 'Failed to import encrypted note.');
+      }
     }
   };
 
@@ -327,7 +475,76 @@ const NotesScreen: React.FC<NotesScreenProps> = ({ user, onSettingsChange, onOpe
         onNewNote={() => handleNewNote()}
         onDeleteNote={handleDeleteNote}
         onOpenVault={onOpenVault}
+        onImportNote={handleImportEncryptedNote}
         user={currentUser}
+      />
+
+      {/* Share Options Modal */}
+      <Modal
+        visible={showShareOptions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareOptions(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowShareOptions(false)}
+        >
+          <View style={[styles.shareOptionsContainer, { backgroundColor: colors.card }]}>
+            <Text style={[styles.shareOptionsTitle, { color: colors.text }]}>
+              Share Note
+            </Text>
+            
+            <TouchableOpacity
+              style={[styles.shareOption, { borderBottomColor: colors.border }]}
+              onPress={handleShareAsText}
+            >
+              <MaterialIcons name="text-snippet" size={24} color={colors.primary} style={styles.shareOptionIcon} />
+              <View style={styles.shareOptionTextContainer}>
+                <Text style={[styles.shareOptionText, { color: colors.text }]}>
+                  Share as Text
+                </Text>
+                <Text style={[styles.shareOptionSubtext, { color: colors.textSecondary }]}>
+                  Plain text, readable by anyone
+                </Text>
+              </View>
+            </TouchableOpacity>
+            
+            <TouchableOpacity
+              style={styles.shareOption}
+              onPress={handleShareEncrypted}
+            >
+              <MaterialIcons name="enhanced-encryption" size={24} color={colors.primary} style={styles.shareOptionIcon} />
+              <View style={styles.shareOptionTextContainer}>
+                <Text style={[styles.shareOptionText, { color: colors.text }]}>
+                  Share Encrypted
+                </Text>
+                <Text style={[styles.shareOptionSubtext, { color: colors.textSecondary }]}>
+                  Password-protected .ppenc file
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.cancelButton, { backgroundColor: colors.border }]}
+              onPress={() => setShowShareOptions(false)}
+            >
+              <Text style={[styles.cancelButtonText, { color: colors.text }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Password Modal */}
+      <PasswordModal
+        visible={passwordModalVisible}
+        mode={passwordModalMode}
+        onSubmit={handlePasswordSubmit}
+        onCancel={handlePasswordCancel}
+        isLoading={isProcessing}
       />
     </SafeAreaView>
   );
@@ -419,6 +636,57 @@ const styles = StyleSheet.create({
   },
   statusText: {
     fontSize: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 40,
+  },
+  shareOptionsContainer: {
+    width: '100%',
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  shareOptionsTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  shareOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+  },
+  shareOptionIcon: {
+    marginRight: 16,
+  },
+  shareOptionTextContainer: {
+    flex: 1,
+  },
+  shareOptionText: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  shareOptionSubtext: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  cancelButton: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 
