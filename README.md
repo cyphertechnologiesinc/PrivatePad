@@ -260,4 +260,4 @@ npm run android
 
 ## License
 
-MIT
+MIT - LICENSE.TXT
