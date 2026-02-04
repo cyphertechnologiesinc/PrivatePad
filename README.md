@@ -17,27 +17,27 @@
 
 ## Features
 
-### 🔐 Encrypted Notes
+###  Encrypted Notes
 - End-to-end encryption using TweetNaCl (XSalsa20-Poly1305)
 - Biometric authentication (Face ID / Touch ID / Fingerprint)
 - Notes stored locally on device—no cloud, no servers
 - Auto-save with debouncing
 - Distraction-free writing interface
 
-### 🗄️ Secure Media Vault
+###  Secure Media Vault
 - Encrypt photos, videos, and documents (PDF, DOC, TXT)
 - Import from camera, photo library, or file picker
 - Real-time thumbnail generation with encrypted storage
 - Password-protect individual files with scrypt key derivation
 - Secure deletion with multi-pass data overwrite
 
-### 📤 Encrypted File Sharing (.ppenc)
+###  Encrypted File Sharing (.ppenc)
 - Export password-protected files as portable `.ppenc` bundles
 - Import encrypted bundles from other PrivatePad users
 - Share sensitive files securely—recipient needs only the password
 - Full interoperability across iOS and Android
 
-### 🌓 Appearance
+###  Appearance
 - Dark mode support (system, light, or dark)
 - Clean, modern UI with smooth animations
 
@@ -373,5 +373,5 @@ A successful verification confirms that the owner of the PGP signing key is the 
 ---
 
 <p align="center">
-  <sub>Built with 🔐 by <a href="https://cryptictechnologies.com">Cryptic Technologies</a></sub>
+  <sub>Built with love by <a href="https://cryptictechnologies.co">Cryptic Technologies</a></sub>
 </p>
