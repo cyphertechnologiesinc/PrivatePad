@@ -1,6 +1,7 @@
 import nacl from 'tweetnacl';
 import { encode as encodeBase64, decode as decodeBase64 } from '@stablelib/base64';
 import { encode as encodeUTF8, decode as decodeUTF8 } from '@stablelib/utf8';
+import { deriveKey as scryptDeriveKey } from '@stablelib/scrypt';
 
 // Re-export base64 utilities for external use (constant-time implementations)
 export const uint8ArrayToBase64 = encodeBase64;
@@ -121,4 +122,30 @@ export const decryptBinary = (
   const decrypted = nacl.secretbox.open(ciphertext, nonce, secretKey);
 
   return decrypted || null;
+};
+
+/**
+ * Generate a random salt for password-based key derivation
+ * Returns base64 encoded 16-byte salt
+ */
+export const generateSalt = (): string => {
+  return uint8ArrayToBase64(nacl.randomBytes(16));
+};
+
+/**
+ * Derive an encryption key from a password using scrypt
+ * Scrypt params: N=16384, r=8, p=1 (balanced for mobile security/performance)
+ * @param password - User's password
+ * @param saltBase64 - Base64 encoded salt
+ * @returns Base64 encoded 32-byte key suitable for NaCl secretbox
+ */
+export const deriveKeyFromPassword = (
+  password: string,
+  saltBase64: string,
+): string => {
+  const salt = base64ToUint8Array(saltBase64);
+  // Scrypt parameters: N=16384 (2^14), r=8, p=1, dkLen=32
+  // This takes ~200-500ms on mobile which is acceptable for user-initiated actions
+  const derivedKey = scryptDeriveKey(encodeUTF8(password), salt, 16384, 8, 1, 32);
+  return uint8ArrayToBase64(derivedKey);
 };

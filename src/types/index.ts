@@ -42,6 +42,9 @@ export interface EncryptedMediaMetadata {
   thumbnailNonce?: string; // Nonce for thumbnail encryption
   createdAt: number;
   updatedAt: number;
+  // Password protection fields
+  isPasswordProtected?: boolean;
+  passwordSalt?: string; // Base64 encoded salt for key derivation
 }
 
 // User/Account types
@@ -104,4 +107,20 @@ export const STORAGE_KEYS = {
 export const KEYCHAIN_SERVICE = {
   SECRET_KEY: 'privatepad_secret_key',
 } as const;
+
+// Portable encrypted file format for sharing
+export interface PrivatePadEncryptedFile {
+  version: number;
+  format: 'privatepad-encrypted';
+  filename: string;
+  mimeType: string;
+  fileSize: number;
+  ciphertext: string;  // base64 encoded encrypted data
+  nonce: string;       // base64 encoded nonce
+  salt: string;        // base64 encoded salt for key derivation
+  createdAt: number;
+}
+
+export const PPENC_VERSION = 1;
+export const PPENC_FORMAT = 'privatepad-encrypted' as const;
 

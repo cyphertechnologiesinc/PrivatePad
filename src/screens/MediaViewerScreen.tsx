@@ -12,6 +12,7 @@ import {
   StatusBar,
   Dimensions,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
@@ -31,7 +32,10 @@ try {
 import { MediaItem } from '../types';
 import {
   loadMedia,
+  loadProtectedMedia,
   exportMediaForSharing,
+  exportProtectedMediaForSharing,
+  exportAsEncryptedBundle,
   cleanupTempFiles,
 } from '../services/mediaStorageService';
 
@@ -42,6 +46,8 @@ interface MediaViewerScreenProps {
   secretKey: string;
   onClose: () => void;
   onDelete: () => void;
+  password?: string; // Password for protected files
+  isPasswordProtected?: boolean;
 }
 
 const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
@@ -49,6 +55,8 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
   secretKey,
   onClose,
   onDelete,
+  password,
+  isPasswordProtected = false,
 }) => {
   const { colors, isDarkMode } = useTheme();
   const [isLoading, setIsLoading] = useState(true);
@@ -56,6 +64,7 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
   const [isSharing, setIsSharing] = useState(false);
   const [videoError, setVideoError] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
+  const [showShareOptions, setShowShareOptions] = useState(false);
 
   useEffect(() => {
     loadMediaContent();
@@ -64,14 +73,23 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
       // Clean up temp files when leaving
       cleanupTempFiles();
     };
-  }, [media.id]);
+  }, [media.id, password]);
 
   const loadMediaContent = async () => {
     setIsLoading(true);
     setVideoError(false);
     
     try {
-      const uri = await loadMedia(media.id, secretKey);
+      let uri: string | null = null;
+      
+      if (isPasswordProtected && password) {
+        // Load with password-derived key
+        uri = await loadProtectedMedia(media.id, password);
+      } else {
+        // Load with master key
+        uri = await loadMedia(media.id, secretKey);
+      }
+      
       setMediaUri(uri);
     } catch (error) {
       console.error('Error loading media:', error);
@@ -81,11 +99,30 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
     }
   };
 
-  const handleShare = async () => {
+  const handleShare = () => {
+    if (isPasswordProtected && password) {
+      // Show share options for protected files
+      setShowShareOptions(true);
+    } else {
+      // Non-protected files: share directly
+      handleShareDecrypted();
+    }
+  };
+
+  const handleShareDecrypted = async () => {
+    setShowShareOptions(false);
     setIsSharing(true);
     
     try {
-      const tempPath = await exportMediaForSharing(media.id, secretKey);
+      let tempPath: string | null = null;
+      
+      if (isPasswordProtected && password) {
+        // Use password to decrypt for sharing
+        tempPath = await exportProtectedMediaForSharing(media.id, password);
+      } else {
+        // Use master key
+        tempPath = await exportMediaForSharing(media.id, secretKey);
+      }
       
       if (tempPath) {
         await Share.share({
@@ -105,10 +142,41 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
     }
   };
 
+  const handleShareEncrypted = async () => {
+    setShowShareOptions(false);
+    
+    if (!password) {
+      Alert.alert('Error', 'Password not available for encrypted export.');
+      return;
+    }
+    
+    setIsSharing(true);
+    
+    try {
+      const tempPath = await exportAsEncryptedBundle(media.id, password);
+      
+      if (tempPath) {
+        await Share.share({
+          url: Platform.OS === 'ios' ? tempPath : `file://${tempPath}`,
+          title: `${media.filename}.ppenc`,
+        });
+        
+        // Clean up after sharing
+        await cleanupTempFiles();
+      } else {
+        Alert.alert('Error', 'Failed to create encrypted bundle.');
+      }
+    } catch (error) {
+      console.error('Error sharing encrypted:', error);
+    } finally {
+      setIsSharing(false);
+    }
+  };
+
   const handleDelete = () => {
     Alert.alert(
-      'Delete Item',
-      'Are you sure you want to permanently delete this item? This cannot be undone.',
+      'Secure Delete',
+      'This will permanently erase this item with a secure overwrite. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -317,10 +385,69 @@ const MediaViewerScreen: React.FC<MediaViewerScreenProps> = ({
         <View style={styles.encryptionBadge}>
           <MaterialIcons name="lock" size={12} color={colors.textSecondary} />
           <Text style={[styles.encryptionText, { color: colors.textSecondary }]}>
-            End-to-end encrypted
+            {isPasswordProtected ? 'Password protected • Encrypted' : 'End-to-end encrypted'}
           </Text>
         </View>
       </View>
+
+      {/* Share Options Modal for Protected Files */}
+      <Modal
+        visible={showShareOptions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowShareOptions(false)}
+      >
+        <TouchableOpacity
+          style={styles.shareModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowShareOptions(false)}
+        >
+          <View style={[styles.shareModalContainer, { backgroundColor: colors.card }]}>
+            <Text style={[styles.shareModalTitle, { color: colors.text }]}>
+              Share Options
+            </Text>
+
+            <TouchableOpacity
+              style={[styles.shareOption, { borderBottomColor: colors.border }]}
+              onPress={handleShareDecrypted}
+            >
+              <MaterialIcons name="share" size={24} color={colors.primary} style={styles.shareOptionIcon} />
+              <View style={styles.shareOptionContent}>
+                <Text style={[styles.shareOptionTitle, { color: colors.text }]}>
+                  Share Decrypted
+                </Text>
+                <Text style={[styles.shareOptionDesc, { color: colors.textSecondary }]}>
+                  Export as plain file
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.shareOption}
+              onPress={handleShareEncrypted}
+            >
+              <MaterialIcons name="enhanced-encryption" size={24} color={colors.primary} style={styles.shareOptionIcon} />
+              <View style={styles.shareOptionContent}>
+                <Text style={[styles.shareOptionTitle, { color: colors.text }]}>
+                  Share Encrypted (.ppenc)
+                </Text>
+                <Text style={[styles.shareOptionDesc, { color: colors.textSecondary }]}>
+                  Recipient needs password to open
+                </Text>
+              </View>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.shareModalCancel, { backgroundColor: colors.border }]}
+              onPress={() => setShowShareOptions(false)}
+            >
+              <Text style={[styles.shareModalCancelText, { color: colors.text }]}>
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 };
@@ -470,6 +597,55 @@ const styles = StyleSheet.create({
   },
   encryptionText: {
     fontSize: 12,
+  },
+  shareModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'flex-end',
+    padding: 16,
+  },
+  shareModalContainer: {
+    borderRadius: 16,
+    overflow: 'hidden',
+  },
+  shareModalTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    textAlign: 'center',
+    paddingVertical: 16,
+  },
+  shareOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
+    borderBottomWidth: 1,
+  },
+  shareOptionIcon: {
+    marginRight: 16,
+  },
+  shareOptionContent: {
+    flex: 1,
+  },
+  shareOptionTitle: {
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  shareOptionDesc: {
+    fontSize: 13,
+    marginTop: 2,
+  },
+  shareModalCancel: {
+    marginTop: 8,
+    marginHorizontal: 16,
+    marginBottom: 16,
+    paddingVertical: 14,
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  shareModalCancelText: {
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

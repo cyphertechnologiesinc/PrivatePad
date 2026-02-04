@@ -18,13 +18,22 @@ import DocumentPicker from 'react-native-document-picker';
 import MaterialIcons from 'react-native-vector-icons/MaterialIcons';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { useTheme } from '../context/ThemeContext';
-import { MediaItem, UserAccount } from '../types';
+import { MediaItem, UserAccount, PrivatePadEncryptedFile } from '../types';
 import {
   saveMedia,
-  deleteMedia,
   loadVaultData,
   loadThumbnailsWithProgress,
   getMediaCounts,
+  secureDeleteMedia,
+  setMediaPassword,
+  removeMediaPassword,
+  loadProtectedMedia,
+  parseEncryptedBundle,
+  verifyBundlePassword,
+  importEncryptedBundle,
+  exportAsEncryptedBundle,
+  exportProtectedMediaForSharing,
+  cleanupTempFiles,
 } from '../services/mediaStorageService';
 import { EncryptedMediaMetadata } from '../types';
 import { getSecretKey } from '../services/keychainService';
@@ -33,6 +42,10 @@ import {
   ensurePhotoLibraryPermission,
 } from '../services/permissionService';
 import MediaViewerScreen from './MediaViewerScreen';
+import PasswordModal, { PasswordModalMode } from '../components/PasswordModal';
+import MediaItemActionSheet from '../components/MediaItemActionSheet';
+import ImportChoiceModal from '../components/ImportChoiceModal';
+import { Share, Platform } from 'react-native';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const NUM_COLUMNS = 3;
@@ -60,6 +73,22 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
   const [counts, setCounts] = useState({ photos: 0, videos: 0, documents: 0, total: 0 });
   const [filter, setFilter] = useState<'all' | 'photo' | 'video' | 'document'>('all');
   const [mediaIndex, setMediaIndex] = useState<EncryptedMediaMetadata[]>([]);
+  
+  // Action sheet and password modal state
+  const [actionSheetItem, setActionSheetItem] = useState<MediaItem | null>(null);
+  const [passwordModalVisible, setPasswordModalVisible] = useState(false);
+  const [passwordModalMode, setPasswordModalMode] = useState<PasswordModalMode>('set');
+  const [pendingPasswordItem, setPendingPasswordItem] = useState<MediaItem | null>(null);
+  const [pendingViewPassword, setPendingViewPassword] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  
+  // Import .ppenc state
+  const [pendingImportBundle, setPendingImportBundle] = useState<PrivatePadEncryptedFile | null>(null);
+  const [pendingImportPassword, setPendingImportPassword] = useState<string | null>(null);
+  const [showImportChoice, setShowImportChoice] = useState(false);
+  
+  // Share encrypted state
+  const [pendingShareAction, setPendingShareAction] = useState<'encrypted' | 'decrypted' | null>(null);
 
   useEffect(() => {
     loadVault();
@@ -238,21 +267,40 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
     }
   };
 
-  const handleDeleteMedia = useCallback(async (id: string) => {
+  // Check if an item is password protected
+  const isItemPasswordProtected = useCallback((id: string): boolean => {
+    const metadata = mediaIndex.find((item) => item.id === id);
+    return metadata?.isPasswordProtected ?? false;
+  }, [mediaIndex]);
+
+  // Handle long press - show action sheet
+  const handleLongPress = useCallback((item: MediaItem) => {
+    setActionSheetItem(item);
+  }, []);
+
+  // Handle secure delete
+  const handleSecureDelete = useCallback(async (id: string) => {
+    setActionSheetItem(null);
+    
     Alert.alert(
-      'Delete Item',
-      'Are you sure you want to permanently delete this item? This cannot be undone.',
+      'Secure Delete',
+      'This will permanently erase this item with a secure overwrite. This cannot be undone.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Delete',
           style: 'destructive',
           onPress: async () => {
-            const success = await deleteMedia(id);
+            setIsProcessing(true);
+            const success = await secureDeleteMedia(id);
+            setIsProcessing(false);
+            
             if (success) {
               setMediaItems(prev => prev.filter(item => item.id !== id));
               const mediaCounts = await getMediaCounts();
               setCounts(mediaCounts);
+              // Also update the index
+              setMediaIndex(prev => prev.filter(item => item.id !== id));
             } else {
               Alert.alert('Error', 'Failed to delete item.');
             }
@@ -261,6 +309,272 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
       ],
     );
   }, []);
+
+  // Handle set password action
+  const handleSetPasswordAction = useCallback(() => {
+    if (!actionSheetItem) return;
+    setPendingPasswordItem(actionSheetItem);
+    setPasswordModalMode('set');
+    setActionSheetItem(null);
+    setPasswordModalVisible(true);
+  }, [actionSheetItem]);
+
+  // Handle remove password action
+  const handleRemovePasswordAction = useCallback(() => {
+    if (!actionSheetItem) return;
+    setPendingPasswordItem(actionSheetItem);
+    setPasswordModalMode('remove');
+    setActionSheetItem(null);
+    setPasswordModalVisible(true);
+  }, [actionSheetItem]);
+
+  // Handle password submission
+  const handlePasswordSubmit = useCallback(async (password: string): Promise<boolean> => {
+    if (!pendingPasswordItem || !secretKey) return false;
+
+    setIsProcessing(true);
+    try {
+      if (passwordModalMode === 'set') {
+        const success = await setMediaPassword(pendingPasswordItem.id, password, secretKey);
+        if (success) {
+          await refreshVault();
+          setPasswordModalVisible(false);
+          setPendingPasswordItem(null);
+          Alert.alert('Success', 'Password protection added.');
+          return true;
+        }
+        return false;
+      } else if (passwordModalMode === 'remove') {
+        const success = await removeMediaPassword(pendingPasswordItem.id, password, secretKey);
+        if (success) {
+          await refreshVault();
+          setPasswordModalVisible(false);
+          setPendingPasswordItem(null);
+          Alert.alert('Success', 'Password protection removed.');
+          return true;
+        }
+        return false;
+      } else if (passwordModalMode === 'enter') {
+        // Verify the password by attempting to load the media
+        const result = await loadProtectedMedia(pendingPasswordItem.id, password);
+        if (result) {
+          // Password correct - store it temporarily and open the viewer
+          setPendingViewPassword(password);
+          setPasswordModalVisible(false);
+          setSelectedMedia(pendingPasswordItem);
+          setPendingPasswordItem(null);
+          return true;
+        }
+        return false;
+      }
+    } finally {
+      setIsProcessing(false);
+    }
+    return false;
+  }, [pendingPasswordItem, secretKey, passwordModalMode, refreshVault]);
+
+  // Handle media item press
+  const handleMediaPress = useCallback((item: MediaItem) => {
+    const isProtected = isItemPasswordProtected(item.id);
+    
+    if (isProtected) {
+      // Show password entry modal
+      setPendingPasswordItem(item);
+      setPasswordModalMode('enter');
+      setPasswordModalVisible(true);
+    } else {
+      // Open normally
+      setPendingViewPassword(null);
+      setSelectedMedia(item);
+    }
+  }, [isItemPasswordProtected]);
+
+  // Handle password modal cancel
+  const handlePasswordCancel = useCallback(() => {
+    setPasswordModalVisible(false);
+    setPendingPasswordItem(null);
+    setPendingImportBundle(null);
+    setPendingShareAction(null);
+  }, []);
+
+  // ============================================
+  // Import .ppenc Handlers
+  // ============================================
+
+  // Handle importing an encrypted .ppenc file
+  const handleImportEncryptedFile = async () => {
+    setShowAddOptions(false);
+    
+    try {
+      const results = await DocumentPicker.pick({
+        type: [DocumentPicker.types.allFiles],
+        copyTo: 'cachesDirectory',
+      });
+
+      const doc = results[0];
+      const fileUri = doc.fileCopyUri || doc.uri;
+      
+      // Check if it's a .ppenc file
+      if (!doc.name?.toLowerCase().endsWith('.ppenc')) {
+        Alert.alert('Invalid File', 'Please select a .ppenc encrypted file.');
+        return;
+      }
+
+      setIsSaving(true);
+      
+      // Parse the bundle
+      const bundle = await parseEncryptedBundle(fileUri);
+      
+      if (!bundle) {
+        Alert.alert('Invalid File', 'Could not read the encrypted file. It may be corrupted or invalid.');
+        setIsSaving(false);
+        return;
+      }
+
+      // Store the bundle and show password modal
+      setPendingImportBundle(bundle);
+      setPasswordModalMode('enter');
+      setPasswordModalVisible(true);
+      setIsSaving(false);
+    } catch (error) {
+      if (!DocumentPicker.isCancel(error)) {
+        console.error('Error importing encrypted file:', error);
+        Alert.alert('Error', 'Failed to import encrypted file.');
+      }
+      setIsSaving(false);
+    }
+  };
+
+  // Extended password submit to handle import flow
+  const handleExtendedPasswordSubmit = useCallback(async (password: string): Promise<boolean> => {
+    // Handle .ppenc import
+    if (pendingImportBundle) {
+      setIsProcessing(true);
+      try {
+        // Verify the password
+        const isValid = verifyBundlePassword(pendingImportBundle, password);
+        if (!isValid) {
+          return false; // Wrong password
+        }
+        
+        // Password correct - show import choice modal
+        setPendingImportPassword(password);
+        setPasswordModalVisible(false);
+        setShowImportChoice(true);
+        return true;
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+    
+    // Handle share encrypted action
+    if (pendingShareAction === 'encrypted' && pendingPasswordItem && secretKey) {
+      setIsProcessing(true);
+      try {
+        const tempPath = await exportAsEncryptedBundle(pendingPasswordItem.id, password);
+        if (tempPath) {
+          setPasswordModalVisible(false);
+          setPendingPasswordItem(null);
+          setPendingShareAction(null);
+          
+          // Share the .ppenc file
+          await Share.share({
+            url: Platform.OS === 'ios' ? tempPath : `file://${tempPath}`,
+            title: `${pendingPasswordItem.filename}.ppenc`,
+          });
+          
+          // Clean up
+          await cleanupTempFiles();
+          return true;
+        }
+        return false;
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+    
+    // Handle share decrypted action
+    if (pendingShareAction === 'decrypted' && pendingPasswordItem) {
+      setIsProcessing(true);
+      try {
+        const tempPath = await exportProtectedMediaForSharing(pendingPasswordItem.id, password);
+        if (tempPath) {
+          setPasswordModalVisible(false);
+          setPendingPasswordItem(null);
+          setPendingShareAction(null);
+          
+          // Share the decrypted file
+          await Share.share({
+            url: Platform.OS === 'ios' ? tempPath : `file://${tempPath}`,
+            title: pendingPasswordItem.filename,
+          });
+          
+          // Clean up
+          await cleanupTempFiles();
+          return true;
+        }
+        return false;
+      } finally {
+        setIsProcessing(false);
+      }
+    }
+    
+    // Fall back to original password submit handler
+    return handlePasswordSubmit(password);
+  }, [pendingImportBundle, pendingShareAction, pendingPasswordItem, secretKey, handlePasswordSubmit]);
+
+  // Handle import choice (keep protected or convert to master key)
+  const handleImportWithChoice = async (keepProtected: boolean) => {
+    if (!pendingImportBundle || !pendingImportPassword || !secretKey) return;
+    
+    setShowImportChoice(false);
+    setIsSaving(true);
+    
+    try {
+      const imported = await importEncryptedBundle(
+        pendingImportBundle,
+        pendingImportPassword,
+        secretKey,
+        keepProtected
+      );
+      
+      if (imported) {
+        await refreshVault();
+        Alert.alert('Success', `"${imported.filename}" imported successfully.`);
+      } else {
+        Alert.alert('Error', 'Failed to import file.');
+      }
+    } catch (error) {
+      console.error('Error importing:', error);
+      Alert.alert('Error', 'Failed to import file.');
+    } finally {
+      setPendingImportBundle(null);
+      setPendingImportPassword(null);
+      setIsSaving(false);
+    }
+  };
+
+  // ============================================
+  // Share Encrypted/Decrypted Handlers
+  // ============================================
+
+  const handleShareEncryptedAction = useCallback(() => {
+    if (!actionSheetItem) return;
+    setPendingPasswordItem(actionSheetItem);
+    setPendingShareAction('encrypted');
+    setPasswordModalMode('enter');
+    setActionSheetItem(null);
+    setPasswordModalVisible(true);
+  }, [actionSheetItem]);
+
+  const handleShareDecryptedAction = useCallback(() => {
+    if (!actionSheetItem) return;
+    setPendingPasswordItem(actionSheetItem);
+    setPendingShareAction('decrypted');
+    setPasswordModalMode('enter');
+    setActionSheetItem(null);
+    setPasswordModalVisible(true);
+  }, [actionSheetItem]);
 
   const filteredItems = filter === 'all' 
     ? mediaItems 
@@ -288,12 +602,13 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
 
   const renderMediaItem = ({ item }: { item: MediaItem }) => {
     const thumbnail = thumbnailCache[item.id];
+    const isProtected = isItemPasswordProtected(item.id);
     
     return (
       <TouchableOpacity
         style={[styles.mediaItem, { backgroundColor: colors.card }]}
-        onPress={() => setSelectedMedia(item)}
-        onLongPress={() => handleDeleteMedia(item.id)}
+        onPress={() => handleMediaPress(item)}
+        onLongPress={() => handleLongPress(item)}
         activeOpacity={0.7}
       >
         {item.type === 'photo' && thumbnail ? (
@@ -320,6 +635,13 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
             </Text>
           </View>
         )}
+
+        {/* Lock badge for password-protected items */}
+        {isProtected && (
+          <View style={styles.lockBadge}>
+            <MaterialIcons name="lock" size={14} color="#fff" />
+          </View>
+        )}
       </TouchableOpacity>
     );
   };
@@ -340,15 +662,22 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
   }
 
   if (selectedMedia && secretKey) {
+    const isSelectedProtected = isItemPasswordProtected(selectedMedia.id);
     return (
       <MediaViewerScreen
         media={selectedMedia}
         secretKey={secretKey}
-        onClose={() => setSelectedMedia(null)}
-        onDelete={() => {
-          handleDeleteMedia(selectedMedia.id);
+        onClose={() => {
           setSelectedMedia(null);
+          setPendingViewPassword(null);
         }}
+        onDelete={() => {
+          handleSecureDelete(selectedMedia.id);
+          setSelectedMedia(null);
+          setPendingViewPassword(null);
+        }}
+        password={isSelectedProtected ? pendingViewPassword ?? undefined : undefined}
+        isPasswordProtected={isSelectedProtected}
       />
     );
   }
@@ -439,7 +768,7 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
       {/* Hint */}
       <View style={[styles.hintBar, { backgroundColor: colors.headerBg, borderTopColor: colors.border }]}>
         <Text style={[styles.hintText, { color: colors.textSecondary }]}>
-          Long press to delete • All files encrypted with XSalsa20-Poly1305
+          Long press for options • XSalsa20-Poly1305 encryption
         </Text>
       </View>
 
@@ -481,12 +810,22 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
             </TouchableOpacity>
             
             <TouchableOpacity
-              style={styles.addOption}
+              style={[styles.addOption, { borderBottomColor: colors.border }]}
               onPress={handleAddDocument}
             >
               <MaterialIcons name="insert-drive-file" size={24} color={colors.primary} style={styles.addOptionIcon} />
               <Text style={[styles.addOptionText, { color: colors.text }]}>
                 Document / PDF
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.addOption}
+              onPress={handleImportEncryptedFile}
+            >
+              <MaterialIcons name="enhanced-encryption" size={24} color={colors.primary} style={styles.addOptionIcon} />
+              <Text style={[styles.addOptionText, { color: colors.text }]}>
+                Import Encrypted (.ppenc)
               </Text>
             </TouchableOpacity>
 
@@ -501,6 +840,41 @@ const MediaVaultScreen: React.FC<MediaVaultScreenProps> = ({ user, onClose }) =>
           </View>
         </TouchableOpacity>
       </Modal>
+
+      {/* Item Action Sheet */}
+      <MediaItemActionSheet
+        visible={!!actionSheetItem}
+        isPasswordProtected={actionSheetItem ? isItemPasswordProtected(actionSheetItem.id) : false}
+        onSetPassword={handleSetPasswordAction}
+        onRemovePassword={handleRemovePasswordAction}
+        onShareDecrypted={handleShareDecryptedAction}
+        onShareEncrypted={handleShareEncryptedAction}
+        onDelete={() => actionSheetItem && handleSecureDelete(actionSheetItem.id)}
+        onCancel={() => setActionSheetItem(null)}
+        itemName={actionSheetItem?.filename}
+      />
+
+      {/* Password Modal */}
+      <PasswordModal
+        visible={passwordModalVisible}
+        mode={passwordModalMode}
+        onSubmit={handleExtendedPasswordSubmit}
+        onCancel={handlePasswordCancel}
+        isLoading={isProcessing}
+      />
+
+      {/* Import Choice Modal */}
+      <ImportChoiceModal
+        visible={showImportChoice}
+        filename={pendingImportBundle?.filename ?? ''}
+        onKeepProtected={() => handleImportWithChoice(true)}
+        onRemoveProtection={() => handleImportWithChoice(false)}
+        onCancel={() => {
+          setShowImportChoice(false);
+          setPendingImportBundle(null);
+          setPendingImportPassword(null);
+        }}
+      />
     </SafeAreaView>
   );
 };
@@ -607,6 +981,17 @@ const styles = StyleSheet.create({
   videoBadgeText: {
     color: '#fff',
     fontSize: 10,
+  },
+  lockBadge: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.7)',
+    borderRadius: 10,
+    width: 22,
+    height: 22,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   documentInfo: {
     position: 'absolute',
