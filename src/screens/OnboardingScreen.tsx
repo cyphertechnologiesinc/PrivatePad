@@ -147,9 +147,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
   );
 
   const renderNameInput = () => (
-    <KeyboardAvoidingView
-      style={styles.stepContainer}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+    <View style={styles.stepContainer}>
       <View style={[styles.iconContainer, { backgroundColor: colors.primary + '15' }]}>
         <Text style={[styles.iconText, { color: colors.primary }]}>ID</Text>
       </View>
@@ -197,7 +195,7 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
           Back
         </Text>
       </TouchableOpacity>
-    </KeyboardAvoidingView>
+    </View>
   );
 
   const renderSetup = () => (
@@ -218,18 +216,24 @@ const OnboardingScreen: React.FC<OnboardingScreenProps> = ({ onComplete }) => {
         barStyle={isDarkMode ? 'light-content' : 'dark-content'}
         backgroundColor={colors.background}
       />
-      <View style={styles.content}>
-        {step === 'welcome' && renderWelcome()}
-        {step === 'name' && renderNameInput()}
-        {step === 'setup' && renderSetup()}
-      </View>
-      
-      {/* Footer branding */}
-      <View style={styles.footer}>
-        <Text style={[styles.footerText, { color: colors.textSecondary }]}>
-          Powered by CRYPTIC
-        </Text>
-      </View>
+      <KeyboardAvoidingView 
+        style={styles.keyboardAvoid}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      >
+        <View style={styles.content}>
+          {step === 'welcome' && renderWelcome()}
+          {step === 'name' && renderNameInput()}
+          {step === 'setup' && renderSetup()}
+        </View>
+        
+        {/* Footer branding */}
+        <View style={styles.footer}>
+          <Text style={[styles.footerText, { color: colors.textSecondary }]}>
+            Powered by CRYPTIC
+          </Text>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 };
@@ -258,6 +262,9 @@ const FeatureItem: React.FC<FeatureItemProps> = ({ iconText, text, colors }) => 
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+  },
+  keyboardAvoid: {
     flex: 1,
   },
   content: {
